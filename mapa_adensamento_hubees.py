@@ -1,4 +1,4 @@
-!pip install fiona --quiet
+#!pip install fiona --quiet
 
 import geopandas as gpd
 import pandas as pd
@@ -7,22 +7,27 @@ import fiona
 import numpy as np
 from shapely.geometry import box, Point
 from folium import FeatureGroup, GeoJson, GeoJsonTooltip, Marker, DivIcon
+from branca.element import MacroElement
+from jinja2 import Template
+
 
 # === CONFIGURAÇÃO ===
-KML_PATH = "/mapa_hubees.kml"
-CSV_PATH = "/Dados região Geral.csv"
+KML_PATH = "mapa_hubees.kml"
+CSV_PATH = "Dados região Geral.csv"
 STEP = 200
-OUTPUT_HTML = "/mapa_completo.html"
+OUTPUT_HTML = "mapa_densidade_hubees.html"
 
 # === MAPA BASE ===
 mapa = folium.Map(location=[-23.561684, -46.655981], zoom_start=14, tiles="CartoDB positron")
-group_bairros = FeatureGroup(name="Bairros", show=True)
+grupo_bairros_individuais = {}
 group_zonas_mortas = FeatureGroup(name="Zonas Mortas", show=False)
 group_quadrantes = FeatureGroup(name="Quadrantes", show=True)
 group_eps_netpark = FeatureGroup(name="EPs Netpark", show=True)
 group_eps_outros = FeatureGroup(name="EPs Não Netpark", show=True)
 group_quadrantes_zm = FeatureGroup(name="Quadrantes ZM", show=True)
 group_quadrantes_ep = FeatureGroup(name="Quadrantes com EP", show=True)
+group_limites_bairros = FeatureGroup(name="Limites", show=True)
+group_numero_quadrante = FeatureGroup(name="Número Quadrante", show=False)
 
 # === LER KML ===
 layers = fiona.listlayers(KML_PATH)
@@ -48,7 +53,7 @@ GeoJson(
     gdf_all_bairros,
     style_function=lambda x: {"color": "#FFA500", "weight": 2, "fillOpacity": 0},
     tooltip=GeoJsonTooltip(fields=["Name"])
-).add_to(group_bairros)
+).add_to(group_limites_bairros)
 
 GeoJson(
     gdf_all_zm,
@@ -70,22 +75,6 @@ df['geometry'] = df.apply(lambda row: Point(row['LNG'], row['LAT']), axis=1)
 gdf_eps = gpd.GeoDataFrame(df, geometry='geometry', crs='EPSG:4326')
 
 eps_dentro = gdf_eps[gdf_eps.geometry.within(gdf_all_bairros.unary_union)]
-
-for _, row in eps_dentro.iterrows():
-    nome = row.get('NOME', 'EP')
-    lat = row['LAT']
-    lng = row['LNG']
-    netpark = str(row.get('EP_NETPARK', '')).strip().lower() in ['netpark', 'sim', 'true', '1']
-    marker_style = {
-        'location': [lat, lng],
-        'radius': 5,
-        'fill_opacity': 0.6,
-        'tooltip': nome
-    }
-    if netpark:
-        folium.CircleMarker(color='#000080', fill_color='#000080', **marker_style).add_to(group_eps_netpark)
-    else:
-        folium.CircleMarker(color='#008000', fill_color='#008000', **marker_style).add_to(group_eps_outros)
 
 # === GERAR QUADRANTES AJUSTADOS POR INTERSECÇÃO
 gdf_union = gpd.GeoDataFrame(geometry=[gdf_all_bairros.unary_union], crs="EPSG:4326")
@@ -120,6 +109,34 @@ estatisticas_bairros = []
 
 for _, bairro_row in gdf_all_bairros.iterrows():
     bairro_nome = bairro_row['Name']
+
+    #grupo_bairro = folium.FeatureGroup(name=f"Bairro: {bairro_nome.title()}", show=True)
+    grupo_bairro = folium.FeatureGroup(name=bairro_nome.replace("_", " ").title(), show=True)
+    grupo_bairros_individuais[bairro_nome] = grupo_bairro
+
+    gdf_bairro_geom = gpd.GeoDataFrame(geometry=[bairro_row.geometry], crs="EPSG:4326")
+
+    folium.GeoJson(
+        gdf_bairro_geom,
+        style_function=lambda x: {"color": "#FFA500", "weight": 2, "fillOpacity": 0},
+        tooltip=GeoJsonTooltip(fields=[])
+    ).add_to(grupo_bairro)
+
+    eps_bairro = eps_dentro[eps_dentro.geometry.within(bairro_row.geometry)]
+
+    for _, row in eps_bairro.iterrows():
+        nome = row.get('NOME', 'EP')
+        lat = row['LAT']
+        lng = row['LNG']
+        netpark = str(row.get('EP_NETPARK', '')).strip().lower() in ['netpark', 'sim', 'true', '1']
+        cor = "blue" if netpark else "green"
+        folium.Marker(
+            location=[lat, lng],
+            tooltip=nome,
+            icon=folium.Icon(icon="car", prefix="fa", color=cor)
+        ).add_to(grupo_bairro)
+
+    grupo_bairro.add_to(mapa)
     gdf_bairro_geom = gpd.GeoDataFrame(geometry=[bairro_row.geometry], crs="EPSG:4326")
 
     quads_do_bairro = gdf_quadrantes[gdf_quadrantes.geometry.intersects(bairro_row.geometry)]
@@ -136,10 +153,9 @@ for _, bairro_row in gdf_all_bairros.iterrows():
     ep = len(quads_com_ep)
     zm = len(quads_zm_validos)
 
-    total_valido = total - zm 
-    #estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes [{total}], Com EP [{ep}], Zona Morta [{zm}]")
-    estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes Válidos [{total_valido}], Com EP [{ep}], Zona Morta [{zm}]")
-
+    total_valido = total - zm
+    estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes [{total}], Com EP [{ep}], Zona Morta [{zm}]")
+    estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes Válidos [{total_valido}], Com EP [{ep}], Zona Morta [{zm}], Total EPs [{len(eps_bairro)}]")
 
     contador = 1  # Contador único por bairro
 
@@ -148,11 +164,11 @@ for _, bairro_row in gdf_all_bairros.iterrows():
 
         # Verifica se é zona morta
         if row.Index in quads_zm_validos.index:
-            color = "#666666"     # cinza escuro
+            color = "#666666"
             fill_opacity = 0.5
         # Verifica se é quadrante com EP
         elif row.Index in quads_com_ep.index:
-            color = "#66cc66"     # verde
+            color = "#72AF26"
             fill_opacity = 0.5
         else:
             color = "#ffffff"     # branco (sem EP e sem ZM)
@@ -166,27 +182,52 @@ for _, bairro_row in gdf_all_bairros.iterrows():
                 "fillColor": c,
                 "fillOpacity": f
             }
-        ).add_to(group_quadrantes)
+        ).add_to(grupo_bairro)
 
+        # Numerar todos os quadrantes
         centro = geom.centroid
         folium.Marker(
             location=[centro.y, centro.x],
             icon=DivIcon(html=f"<div style='color:#363636;font-size:9px'><b>{contador}</b></div>")
-        ).add_to(group_quadrantes)
-
+        ).add_to(group_numero_quadrante)
         contador += 1
 
 
-
-# === ADICIONAR GRUPOS AO MAPA
-group_bairros.add_to(mapa)
+# === ADICIONAR GRUPOS AO MAPA (na ordem correta para aparecer no controle de camadas)
+group_limites_bairros.add_to(mapa)
+group_numero_quadrante.add_to(mapa)
 group_zonas_mortas.add_to(mapa)
-group_quadrantes.add_to(mapa)
-group_quadrantes_zm.add_to(mapa)
-group_quadrantes_ep.add_to(mapa)
-group_eps_netpark.add_to(mapa)
-group_eps_outros.add_to(mapa)
+
+# LayerControl DEVE vir por último
 folium.LayerControl(collapsed=False).add_to(mapa)
+
+# Substitui o título padrão da LayerControl por "Filtros"
+custom_css = """
+<style>
+    .leaflet-control-layers-base label span {
+        display: none !important;
+    }
+
+    .leaflet-control-layers-base:before {
+        content: "Mostrar";
+        font-weight: bold;
+        display: block;
+        margin-bottom: 5px;
+        color: #333;
+    }
+
+    .leaflet-control-layers-list label:nth-child(6)::before {
+        content: "────────────";
+        display: block;
+        margin: 8px 0 4px 0;
+        color: #aaa;
+        font-size: 10px;
+        text-align: center;
+    }
+</style>
+"""
+
+mapa.get_root().header.add_child(folium.Element(custom_css))
 
 # === LEGENDA SUPERIOR ESQUERDA
 estatisticas_html = "<br>".join(estatisticas_bairros)
@@ -200,7 +241,7 @@ legend_html = f"""
     padding: 15px;
     border-radius: 10px;
     font-family: 'Segoe UI', sans-serif;
-    max-height: 700px;
+    max-height: 800px;
     overflow-y: auto;
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     width: 300px;
@@ -212,12 +253,15 @@ legend_html = f"""
 """
 
 for linha in estatisticas_bairros:
+    if "Total EPs" not in linha:
+        continue  # ignora a linha incompleta
     nome = linha.split(":")[0].strip().replace("_", " ").title()
     valores = linha.split(":")[1]
     #quad = int(valores.split("[")[1].split("]")[0])
     quad_valido = int(valores.split("[")[1].split("]")[0])
     ep = int(valores.split("[")[2].split("]")[0])
     zm = int(valores.split("[")[3].split("]")[0])
+    total_eps = int(valores.split("[")[4].split("]")[0])
     itl = round((ep / quad_valido) * 100) if quad_valido > 0 else 0
     #itl = round((ep / quad) * 100) if quad > 0 else 0
 
@@ -235,9 +279,13 @@ for linha in estatisticas_bairros:
         </div>
 
         <div style="font-size:13px; color:#333;">
-                <b>Total Quadrantes Válidos:</b> {quad_valido}<br>
-            🟩 <b>Com EP:</b> {ep}<br>
-            ⬜ <b>Zona Morta:</b> {zm}
+              <b>Total Quadrantes Válidos:</b> {quad_valido}<br>
+              <span style="display:inline-block; width:12px; height:12px; background-color:#72AF26; margin-right:6px; border-radius:2px;"></span>
+              <b>Com EP:</b> {ep}<br>
+              <span style="display:inline-block; width:12px; height:12px; background-color:#666; margin-right:6px; border-radius:2px;"></span>
+              <b>Zona Morta:</b> {zm}<br>
+
+            <b>Total EPs:</b> {total_eps}
         </div>
     </div>
     """
@@ -245,6 +293,7 @@ for linha in estatisticas_bairros:
 legend_html += "</div>"
 mapa.get_root().html.add_child(folium.Element(legend_html))
 
+
 # === SALVAR
 mapa.save(OUTPUT_HTML)
-mapa
+#mapa
