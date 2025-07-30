@@ -31,7 +31,7 @@ group_quadrantes_ep = FeatureGroup(name="Quadrantes com EP", show=True)
 group_limites_bairros = FeatureGroup(name="Limites", show=True)
 group_numero_quadrante = FeatureGroup(name="Número Quadrante", show=False)
 group_eps_potenciais = FeatureGroup(name="EPs Potenciais", show=False)
-group_quadrantes_ze = FeatureGroup(name="ZE (Zonas de Resiliência)", show=False)
+group_quadrantes_zr = FeatureGroup(name="ZR (Zonas de Resiliência)", show=False)
 
 # === LER KML ===
 layers = fiona.listlayers(KML_PATH)
@@ -178,7 +178,7 @@ for _, bairro_row in gdf_all_bairros.iterrows():
         lng = row['LNG']
         netpark = str(row.get('EP_NETPARK', '')).strip().lower() in ['netpark', 'sim', 'true', '1']
         cor = "blue" if netpark else "green"
-        
+
         tooltip_text = f"""
         <div style="font-size:12px;">
             <b>{nome}</b><br>
@@ -186,16 +186,25 @@ for _, bairro_row in gdf_all_bairros.iterrows():
             <span style="color:#000000;"><b>ID:</b> {row.get('ID', 'N/A')}</span><br>
             <span style="color:#000000;"><b>Empresa:</b> {row.get('EP_NAME', 'N/A')}</span><br>
             <span style="color:#000000;"><b>Status:</b> {row.get('ACTIVE', 'N/A')}</span>
-            
+        </div>
+        """
+
+        # Link de rota no Google Maps
+        maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+        popup_text = f"""
+        <div style="font-size:13px;">
+            <a href="{maps_url}" target="_blank" style="font-weight:bold; color:#2A81CB;">
+                Traçar rota no Google Maps 🚗
+            </a>
         </div>
         """
 
         folium.Marker(
-    location=[lat, lng],
-    tooltip=folium.Tooltip(tooltip_text, sticky=True),
-    icon=folium.Icon(icon="car", prefix="fa", color=cor)
-).add_to(grupo_bairro)
-
+            location=[lat, lng],
+            tooltip=folium.Tooltip(tooltip_text, sticky=True),
+            popup=folium.Popup(popup_text, max_width=300),
+            icon=folium.Icon(icon="car", prefix="fa", color=cor)
+        ).add_to(grupo_bairro)
 
     grupo_bairro.add_to(mapa)
     gdf_bairro_geom = gpd.GeoDataFrame(geometry=[bairro_row.geometry], crs="EPSG:4326")
@@ -207,7 +216,7 @@ for _, bairro_row in gdf_all_bairros.iterrows():
     ids_ep = quads_ep.index.unique()
     quads_com_ep = quads_do_bairro.loc[ids_ep]
 
-    # === IDENTIFICAÇÃO DOS QUADRANTES ZE (Zonas de Resiliência) ===
+    # === IDENTIFICAÇÃO DOS QUADRANTES ZR (Zonas de Resiliência) ===
     ep_por_quad = quads_ep.groupby(quads_ep.index)
     quadrantes_ze = []
     for quad_idx, eps in ep_por_quad:
@@ -218,7 +227,7 @@ for _, bairro_row in gdf_all_bairros.iterrows():
         elif total_eps == 1 and netparks[0]:
             quadrantes_ze.append(quad_idx)
 
-    # === DESENHAR QUADRANTES ZE NO MAPA ===
+    # === DESENHAR QUADRANTES ZR NO MAPA ===
     for quad_idx in set(quadrantes_ze):
         geom_ze = quads_do_bairro.loc[quad_idx].geometry
         folium.GeoJson(
@@ -229,7 +238,7 @@ for _, bairro_row in gdf_all_bairros.iterrows():
                 "fillColor": "#1D830D",  # verde escuro preenchimento
                 "fillOpacity": 0.65,
             }
-        ).add_to(group_quadrantes_ze)
+        ).add_to(group_quadrantes_zr)
 
 
     # === CONTAR QUADRANTES COM +1 EP OU PELO MENOS 1 NETPARK
@@ -313,7 +322,7 @@ group_limites_bairros.add_to(mapa)
 group_zonas_mortas.add_to(mapa)
 group_eps_potenciais.add_to(mapa)
 group_numero_quadrante.add_to(mapa)
-group_quadrantes_ze.add_to(mapa)
+group_quadrantes_zr.add_to(mapa)
 
 
 # LayerControl DEVE vir por último
@@ -406,7 +415,7 @@ for linha in estatisticas_bairros:
     legend_html += f"""
     <div style="background:#f9f9f9; border-radius:8px; padding:10px 12px; margin-bottom:10px; border-left:3px solid #666;">
         <div style="font-size:14px; font-weight:normal; margin-bottom:6px;">
-            {nome}: ILT <b>{itl}%</b>  •  ZE <b>{ze}%</b>
+            {nome}: ILT <b>{itl}%</b>  •  ZR <b>{ze}%</b>
         </div>
         <div style="font-size:11px; color:#333;">
             <span style="display:inline-block; width:11px; height:12px; border:1px solid #666; background-color:transparent; margin-right:6px; border-radius:2px;"></span>
@@ -467,11 +476,24 @@ for _, row in gdf_pe_dentro.iterrows():
     </div>
     """
 
+    lat = row['LAT']
+    lng = row['LNG']
+    maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+    popup_text = f"""
+    <div style="font-size:13px;">
+        <a href="{maps_url}" target="_blank" style="font-weight:bold; color:#2A81CB;">
+            Traçar rota no Google Maps 🚗
+        </a>
+    </div>
+    """
+
     folium.Marker(
-        location=[row['LAT'], row['LNG']],
+        location=[lat, lng],
         tooltip=folium.Tooltip(tooltip_text, sticky=True),
+        popup=folium.Popup(popup_text, max_width=300),
         icon=folium.Icon(icon="plus", prefix="fa", color="darkred")
     ).add_to(group_eps_potenciais)
+
 
 
 
