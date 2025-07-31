@@ -269,8 +269,6 @@ for _, bairro_row in gdf_all_bairros.iterrows():
 
     total_valido = total - zm
     estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes [{total}], Com EP [{ep}], Zona Morta [{zm}]")
-    #estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes Válidos [{total_valido}], Com EP [{ep}], Zona Morta [{zm}], Total EPs [{len(eps_bairro)}]")
-    #estatisticas_bairros.append(f"<b>{bairro_nome.title()}:</b> Quadrantes Válidos [{total_valido}], Com EP [{ep}], Zona Morta [{zm}], Total EPs [{len(eps_bairro)}], Potenciais [{qtde_eps_potenciais}]|DETALHES|{detalhes_eps}")
     estatisticas_bairros.append(
         f"<b>{bairro_nome.title()}:</b> "
         f"Quadrantes Válidos [{total_valido}], "
@@ -343,7 +341,7 @@ custom_css = """
         color: #333;
     }
 
-    .leaflet-control-layers-list label:nth-child(6)::before {
+    .leaflet-control-layers-list label:nth-child(7)::before {
         content: "────────────";
         display: block;
         margin: 8px 0 4px 0;
