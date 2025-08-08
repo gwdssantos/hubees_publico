@@ -308,7 +308,7 @@ custom_css = """
         color: #333;
     }
 
-    .leaflet-control-layers-list label:nth-child(11)::before {
+    .leaflet-control-layers-list label:nth-child(12)::before {
         content: "────────────";
         display: block;
         margin: 8px 0 4px 0;
